@@ -24,7 +24,9 @@ collection = chroma_client.get_or_create_collection(
 )
 
 
-
+# This function is responsible for taking the RAW whisper transcript segments and 
+# Turning them into smaller searchable pieces (chunks) 
+# that your embedded model can process.
 def chunk_transcript(segments):
     """
     Split Whisper transcript into ~500 word chunks
@@ -93,8 +95,9 @@ def chunk_transcript(segments):
     return chunks
 
 
-
-# TODO: Implement with OpenAI text-embedding-3-small + ChromaDB
+# This function is the storage part of your vector service. Its job is:
+# take the raw whisper transcript, split it, turn the chunks into embeddings
+# them save them into ChromaDB
 async def embed_and_store(lecture_id: str, transcript: dict) -> None:
     """
     Chunks transcript (~500 tokens, 50-token overlap), embeds each chunk,
