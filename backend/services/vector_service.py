@@ -149,7 +149,7 @@ async def embed_and_store(lecture_id: str, transcript: dict) -> None:
 
 
 
-# TODO: Implement semantic search + Groq Q&A
+# This function is the search and answer of the vector service 
 async def semantic_search(lecture_id: str, query: str) -> dict:
     """
     Embeds the query, retrieves top-k chunks from ChromaDB,
