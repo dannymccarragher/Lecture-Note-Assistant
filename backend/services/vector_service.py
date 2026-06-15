@@ -1,64 +1,47 @@
 import os
 import chromadb
-from openai import OpenAI
+from sentence_transformers import SentenceTransformer
 from groq import Groq
 
 
-# API clients
-openai_client = OpenAI(
-    api_key=os.getenv("OPENAI_API_KEY")
-)
-
-groq_client = Groq(
-    api_key=os.getenv("GROQ_API_KEY")
+# Local embedding model (safe to load globally)
+embedding_model = SentenceTransformer(
+    "all-MiniLM-L6-v2",
 )
 
 
-# ChromaDB storage
-chroma_client = chromadb.PersistentClient(
-    path="./chroma_db"
-)
-
+# ChromaDB
+chroma_client = chromadb.PersistentClient(path="./chroma_db")
 collection = chroma_client.get_or_create_collection(
     name="lecture_chunks"
 )
 
 
-# This function is responsible for taking the RAW whisper transcript segments and 
-# Turning them into smaller searchable pieces (chunks) 
-# that your embedded model can process.
+def get_groq_client():
+    api_key = os.getenv("GROQ_API_KEY")
+
+    if not api_key:
+        raise ValueError("GROQ_API_KEY is missing")
+
+    return Groq(api_key=api_key)
+
+
 def chunk_transcript(segments):
-    """
-    Split Whisper transcript into ~500 word chunks
-    with 50 word overlap.
-    """
-
     chunks = []
-
     current_text = []
     current_start = None
     current_end = None
-
     word_count = 0
-
 
     for segment in segments:
 
         if current_start is None:
             current_start = segment["start"]
 
-
-        current_text.append(
-            segment["text"]
-        )
-
+        current_text.append(segment["text"])
         current_end = segment["end"]
 
-
-        word_count += len(
-            segment["text"].split()
-        )
-
+        word_count += len(segment["text"].split())
 
         if word_count >= 500:
 
@@ -68,125 +51,65 @@ def chunk_transcript(segments):
                 "end": current_end
             })
 
+            overlap = " ".join(current_text).split()[-50:]
 
-            # overlap
-            overlap = " ".join(
-                current_text
-            ).split()[-50:]
-
-
-            current_text = [
-                " ".join(overlap)
-            ]
-
+            current_text = [" ".join(overlap)]
             word_count = len(overlap)
             current_start = current_end
 
-
     if current_text:
-
         chunks.append({
             "text": " ".join(current_text),
             "start": current_start,
             "end": current_end
         })
 
-
     return chunks
 
 
-# This function is the storage part of your vector service. Its job is:
-# take the raw whisper transcript, split it, turn the chunks into embeddings
-# them save them into ChromaDB
+# -----------------------------
+# EMBED + STORE
+# -----------------------------
 async def embed_and_store(lecture_id: str, transcript: dict) -> None:
-    """
-    Chunks transcript (~500 tokens, 50-token overlap), embeds each chunk,
-    and stores in ChromaDB under the given lecture_id.
-    """
 
-    chunks = chunk_transcript(
-        transcript["segments"]
-    )
-
+    chunks = chunk_transcript(transcript["segments"])
 
     for i, chunk in enumerate(chunks):
 
-        # Create embedding
-        embedding_response = openai_client.embeddings.create(
-            model="text-embedding-3-small",
-            input=chunk["text"]
-        )
-
-
-        embedding = (
-            embedding_response
-            .data[0]
-            .embedding
-        )
-
+        embedding = embedding_model.encode(chunk["text"]).tolist()
 
         collection.add(
-            ids=[
-                f"{lecture_id}_{i}"
-            ],
-
-            embeddings=[
-                embedding
-            ],
-
-            documents=[
-                chunk["text"]
-            ],
-
-            metadatas=[
-                {
-                    "lecture_id": lecture_id,
-                    "start": chunk["start"],
-                    "end": chunk["end"]
-                }
-            ]
+            ids=[f"{lecture_id}_{i}"],
+            embeddings=[embedding],
+            documents=[chunk["text"]],
+            metadatas=[{
+                "lecture_id": lecture_id,
+                "start": chunk["start"],
+                "end": chunk["end"]
+            }]
         )
 
 
-
-# This function is the search and answer of the vector service 
+# -----------------------------
+# SEMANTIC SEARCH
+# -----------------------------
 async def semantic_search(lecture_id: str, query: str) -> dict:
-    """
-    Embeds the query, retrieves top-k chunks from ChromaDB,
-    sends context to Groq.
-    """
 
-
-    # Embed question
-    query_embedding = openai_client.embeddings.create(
-        model="text-embedding-3-small",
-        input=query
-    )
-
+    query_embedding = embedding_model.encode(query).tolist()
 
     results = collection.query(
-
-        query_embeddings=[
-            query_embedding.data[0].embedding
-        ],
-
+        query_embeddings=[query_embedding],
         n_results=5,
-
-        where={
-            "lecture_id": lecture_id
-        }
+        where={"lecture_id": lecture_id}
     )
-
 
     chunks = results["documents"][0]
     metadata = results["metadatas"][0]
 
-
     context = "\n\n".join(chunks)
 
-
     prompt = f"""
-Answer the question using only the lecture content.
+Answer using only the lecture content.
 
 Lecture:
 {context}
@@ -195,32 +118,24 @@ Question:
 {query}
 """
 
+    groq_client = get_groq_client()
 
     response = groq_client.chat.completions.create(
-
         model="llama-3.1-70b-versatile",
-
         messages=[
-            {
-                "role": "user",
-                "content": prompt
-            }
+            {"role": "user", "content": prompt}
         ],
-
         temperature=0.2
     )
 
-
-    sources = []
-
-    for text, meta in zip(chunks, metadata):
-
-        sources.append({
+    sources = [
+        {
             "text": text,
             "start": meta["start"],
             "end": meta["end"]
-        })
-
+        }
+        for text, meta in zip(chunks, metadata)
+    ]
 
     return {
         "answer": response.choices[0].message.content,
