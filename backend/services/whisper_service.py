@@ -1,28 +1,48 @@
-import io
-import os
-import openai
+from faster_whisper import WhisperModel
 
 
-async def transcribe_audio(file_bytes: bytes, filename: str) -> dict:
-    """
-    Sends audio to OpenAI Whisper and returns transcript text + timestamped segments.
-    Returns: {"text": str, "segments": [{"start": float, "end": float, "text": str}]}
-    """
-    client = openai.AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+model = WhisperModel(
+    "base",
+    compute_type="int8"
+)
 
-    audio_file = io.BytesIO(file_bytes)
-    audio_file.name = filename
 
-    response = await client.audio.transcriptions.create(
-        model="whisper-1",
-        file=audio_file,
-        response_format="verbose_json",
-        timestamp_granularities=["segment"],
+async def transcribe_audio(
+    file_bytes: bytes,
+    filename: str
+) -> dict:
+
+
+    with open(filename, "wb") as f:
+        f.write(file_bytes)
+
+
+    segments, info = model.transcribe(
+        filename
     )
 
-    segments = [
-        {"start": seg.start, "end": seg.end, "text": seg.text.strip()}
-        for seg in response.segments
-    ]
 
-    return {"text": response.text, "segments": segments}
+    transcript_segments = []
+
+    full_text = []
+
+
+    for segment in segments:
+
+        transcript_segments.append(
+            {
+                "start": segment.start,
+                "end": segment.end,
+                "text": segment.text.strip()
+            }
+        )
+
+        full_text.append(
+            segment.text.strip()
+        )
+
+
+    return {
+        "text": " ".join(full_text),
+        "segments": transcript_segments
+    }
