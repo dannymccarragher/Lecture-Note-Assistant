@@ -45,7 +45,7 @@ async def run_pipeline(lecture_id: str, file_bytes: bytes, filename: str):
 
         lectures[lecture_id].update({
             "status": "complete",
-            "transcript": transcript,
+            "transcript": transcript["text"],
             "summary": llm_result["summary"],
             "key_points": llm_result["key_points"],
             "quiz": llm_result["quiz"],
