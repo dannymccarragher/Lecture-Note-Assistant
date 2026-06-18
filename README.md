@@ -42,6 +42,8 @@ python -m venv .venv
 
 ```bash
 pip install -r requirements.txt
+
+python -m pip install "uvicorn[standard]" fastapi faster-whisper groq chromadb sentence-transformers python-multipart
 ```
 
 4. Create a `.env` file in the `backend/` folder with your Groq API key:
@@ -53,7 +55,7 @@ GROQ_API_KEY=your_groq_api_key_here
 5. Start the backend server:
 
 ```bash
-python main.py
+python -m uvicorn main:app --reload
 ```
 
 The backend will run on `http://127.0.0.1:8000`.
@@ -105,8 +107,23 @@ Currently the frontend accepts audio/video uploads only:
 - `.mpg`
 - `.mpeg`
 
+## AI Features
+
+This project uses AI in three main areas:
+
+1. **Lecture Transcription**
+   - Uses `faster-whisper` to convert uploaded lecture audio into text.
+
+2. **AI Summary & Quiz Generation**
+   - Uses the Groq API with an LLM to generate summaries and quiz questions.
+
+3. **Semantic Search**
+   - Uses Sentence Transformers to create embeddings.
+   - Uses ChromaDB to store and retrieve relevant lecture content.
+
+
 ## Notes
 
-- The backend uses `faster-whisper` for transcription, which requires `ffmpeg`.
-- The backend also uses the Groq API for summary and quiz generation.
+- The backend uses `faster-whisper` for audio transcription, which requires `ffmpeg` to process audio files.
+- The backend uses the Groq API for generating summaries and quizzes.
 - If the frontend cannot reach the backend, confirm that the backend is running at `http://127.0.0.1:8000` and that `frontend/src/App.tsx` is configured with the correct `backendUrl`.
