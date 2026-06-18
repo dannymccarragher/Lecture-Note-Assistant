@@ -228,7 +228,7 @@ export default function App() {
               <div className="search-result">
                 <h3>Answer</h3>
                 <p>{searchResult.answer}</p>
-                {searchResult.sources.length > 0 && (
+                {/* {searchResult.sources.length > 0 && (
                   <div>
                     <h4>Sources</h4>
                     <ul>
@@ -237,7 +237,7 @@ export default function App() {
                       ))}
                     </ul>
                   </div>
-                )}
+                )} */}
               </div>
             )}
           </section>
